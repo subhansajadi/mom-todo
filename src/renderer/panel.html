@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>MoM's list</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <main class="card" id="card">
+    <header class="header">
+      <h1>MoM's list</h1>
+      <span class="status" id="status"></span>
+    </header>
+    <div class="progress"><div class="fill" id="fill"></div></div>
+    <label class="add" id="add">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <mask id="plus"><rect width="16" height="16" fill="#fff"/><path d="M8 4.4v7.2M4.4 8h7.2" stroke="#000" stroke-width="1.8" stroke-linecap="round"/></mask>
+        <circle cx="8" cy="8" r="7.6" fill="#fff" mask="url(#plus)"/>
+      </svg>
+      <input id="draft" placeholder="Add a task and press return" spellcheck="false" autocomplete="off">
+    </label>
+    <section class="body" id="body"></section>
+  </main>
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

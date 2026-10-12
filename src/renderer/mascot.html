@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>MoM</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 230px;
+      height: 180px;
+      overflow: hidden;
+      background: transparent;
+      font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      cursor: default;
+    }
+    /* MoM sits in the bottom-right corner; the rest of the window is room for speech bubbles. */
+    #sprite {
+      position: absolute;
+      left: 120px;
+      top: 58px;
+      width: 100px;
+      height: 112px;
+      transform-origin: 50% 100%;
+      transition: transform 0.32s cubic-bezier(0.34, 1.7, 0.6, 1);
+    }
+    #sprite.hover { transform: scale(1.07); }
+    #art { position: absolute; left: -120px; top: -58px; pointer-events: none; }
+    .badge {
+      position: absolute;
+      right: 16px;
+      top: 6px;
+      min-width: 20px;
+      height: 20px;
+      box-sizing: border-box;
+      padding: 0 5px;
+      border-radius: 10px;
+      border: 2px solid #fff;
+      background: #3a2a22;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 16px;
+      text-align: center;
+      pointer-events: none;
+      transition: transform 0.3s cubic-bezier(0.34, 1.7, 0.6, 1), opacity 0.2s;
+    }
+    .badge.hidden { transform: scale(0.2); opacity: 0; }
+    #bubbles { position: absolute; right: 10px; bottom: 124px; pointer-events: none; }
+    .bubble {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      min-width: 70px;
+      box-sizing: border-box;
+      padding: 7px 11px 13px;
+      white-space: nowrap;
+      text-align: center;
+      color: #3a2a22;
+      font-size: 12.5px;
+      font-weight: 700;
+      transform-origin: 100% 100%;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+      animation: pop-in 0.38s cubic-bezier(0.34, 1.6, 0.6, 1) both;
+    }
+    .bubble::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 6px 0;
+      border-radius: 11px;
+      background: #fff;
+      z-index: -1;
+    }
+    /* The tail points down at MoM's middle. */
+    .bubble::after {
+      content: "";
+      position: absolute;
+      right: 43px;
+      bottom: 0;
+      width: 11px;
+      height: 6.5px;
+      background: #fff;
+      clip-path: polygon(0 0, 7px 100%, 11px 0);
+    }
+    .bubble.out { animation: pop-out 0.2s ease-in both; }
+    @keyframes pop-in { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @keyframes pop-out { from { transform: scale(1); opacity: 1; } to { transform: scale(0.5); opacity: 0; } }
+  </style>
+</head>
+<body>
+  <div id="bubbles"></div>
+  <div id="sprite">
+    <canvas id="art"></canvas>
+    <div id="badge" class="badge hidden"></div>
+  </div>
+  <script type="module" src="mascot.js"></script>
+</body>
+</html>
