@@ -42,13 +42,6 @@
             "arm64",
             "x64"
           ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
         }
       ],
       "category": "public.app-category.productivity",
@@ -57,10 +50,10 @@
       "extendInfo": {
         "LSUIElement": true
       },
-      "artifactName": "MoM-${version}-mac-${arch}.${ext}"
+      "artifactName": "MoM-mac-${arch}.${ext}"
     },
     "dmg": {
-      "artifactName": "MoM-${version}-mac-${arch}.dmg",
+      "artifactName": "MoM-mac-${arch}.dmg",
       "title": "MoM",
       "background": "build/background.png",
       "window": {
@@ -95,7 +88,7 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "artifactName": "MoM-Setup-${version}.exe",
+      "artifactName": "MoM-Setup.exe",
       "shortcutName": "MoM"
     }
   },

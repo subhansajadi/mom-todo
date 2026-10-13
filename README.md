@@ -8,15 +8,15 @@ MoM floats in the corner, its eyes follow your mouse, and while you work it gets
 
 ## Download
 
-Go to **[Releases](https://github.com/subhansajadi/mom-todo/releases/latest)** and download:
+Click the one for your computer. It always downloads the newest version.
 
-| Your computer | File |
+| Your computer | Download |
 |---|---|
-| Mac with Apple silicon (M1, M2, M3, M4…) | `MoM-x.y.z-mac-arm64.dmg` |
-| Mac with an Intel processor | `MoM-x.y.z-mac-x64.dmg` |
-| Windows 10 / 11 | `MoM-Setup-x.y.z.exe` |
+| 🍎 Mac with Apple silicon (M1, M2, M3, M4…) | **[MoM for Apple silicon Macs](https://github.com/subhansajadi/mom-todo/releases/latest/download/MoM-mac-arm64.dmg)** |
+| 🍎 Mac with an Intel processor | **[MoM for Intel Macs](https://github.com/subhansajadi/mom-todo/releases/latest/download/MoM-mac-x64.dmg)** |
+| 🪟 Windows 10 / 11 | **[MoM for Windows](https://github.com/subhansajadi/mom-todo/releases/latest/download/MoM-Setup.exe)** |
 
-Not sure which Mac you have? Open the Apple menu → **About This Mac**. If it says **Chip: Apple M…**, get `arm64`. If it says **Processor: Intel**, get `x64`.
+Not sure which Mac you have? Open the Apple menu → **About This Mac**. If it says **Chip: Apple M…**, you have Apple silicon. If it says **Processor: Intel**, you have Intel.
 
 ### Installing on a Mac
 
@@ -34,7 +34,7 @@ MoM has no Dock icon. MoM itself is the app: look in the bottom-right corner of 
 
 ### Installing on Windows
 
-1. Run `MoM-Setup-x.y.z.exe`. It installs just for you, no admin needed.
+1. Run `MoM-Setup.exe`. It installs just for you, no admin needed.
 2. If Windows SmartScreen says "Windows protected your PC", click **More info → Run anyway**. (This appears because MoM isn't code-signed.)
 
 MoM appears in the bottom-right corner above the taskbar, with an icon in the system tray.
@@ -97,9 +97,9 @@ npm version minor
 git push --follow-tags
 ```
 
-The release must include `latest-mac.yml`, `latest.yml`, the Mac `.zip` files and the `.blockmap` files. The workflow uploads them. Without them, installed copies never see the update. The repo has to be public (`subhansajadi/mom-todo`), because MoM reads releases without signing in.
+The release holds five files: the two DMGs, `MoM-Setup.exe`, and `latest-mac.yml` / `latest.yml`. Installed copies read those last two to find the update, so never delete them from a release. The file names have no version number, so the download links above always point to the newest release. The repo has to be public (`subhansajadi/mom-todo`), because MoM reads releases without signing in.
 
-To test an update on your own machine before releasing, build two versions and serve the newer one's `latest-mac.yml` and `.zip` from a local folder. Then start the older one with `MOM_UPDATE_FEED=http://127.0.0.1:8765` and `MOM_DATA_DIR=/tmp/mom-test`, so it doesn't touch your real list.
+To test an update on your own machine before releasing, build two versions and serve the newer one's `latest-mac.yml` and `.dmg` files from a local folder. Then start the older one with `MOM_UPDATE_FEED=http://127.0.0.1:8765` and `MOM_DATA_DIR=/tmp/mom-test`, so it doesn't touch your real list.
 
 ## How it's built
 

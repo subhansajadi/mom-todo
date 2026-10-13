@@ -1,8 +1,9 @@
 # Builds MoM for macOS and Windows and publishes both to a GitHub release.
 # Trigger it by pushing a version tag:  npm version minor && git push --follow-tags
 #
-# Installed copies of MoM find new versions through the latest.yml / latest-mac.yml files uploaded here,
-# and show students the bullets from build/release-notes.md. Without those files nobody gets the update.
+# The release holds only what people download (two DMGs and the Windows installer) plus latest.yml and
+# latest-mac.yml, which installed copies of MoM read to find new versions. Without those two files nobody
+# gets the update. Students see the bullets from build/release-notes.md, in the app and on the release page.
 name: Release
 
 on:
@@ -22,14 +23,11 @@ jobs:
             command: npm run dist:mac
             files: |
               dist.nosync/*.dmg
-              dist.nosync/*.zip
-              dist.nosync/*.blockmap
               dist.nosync/latest-mac.yml
           - os: windows-latest
             command: npm run dist:win
             files: |
               dist.nosync/*.exe
-              dist.nosync/*.blockmap
               dist.nosync/latest.yml
     runs-on: ${{ matrix.os }}
     steps:
@@ -67,7 +65,31 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      # A download table first, so nobody has to work out which file in the list is theirs.
+      - name: Write the release page
+        run: |
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          {
+            echo "## Download"
+            echo
+            echo "| Your computer | Download |"
+            echo "|---|---|"
+            echo "| 🍎 **Mac with Apple silicon** (M1, M2, M3, M4…) | [**MoM-mac-arm64.dmg**](${base}/MoM-mac-arm64.dmg) |"
+            echo "| 🍎 **Mac with Intel** | [**MoM-mac-x64.dmg**](${base}/MoM-mac-x64.dmg) |"
+            echo "| 🪟 **Windows 10 / 11** | [**MoM-Setup.exe**](${base}/MoM-Setup.exe) |"
+            echo
+            echo "Not sure which Mac you have? Apple menu → **About This Mac**: \"Chip: Apple M…\" means Apple silicon, \"Processor: Intel\" means Intel."
+            echo
+            echo "The first time you open MoM, your computer will warn you because it isn't from a paid developer account. [Here's how to open it](https://github.com/${GITHUB_REPOSITORY}#download)."
+            echo
+            echo "The other files below are for MoM's automatic updates; you don't need them."
+            echo
+            echo "## What's new"
+            echo
+            grep -v '^<!--\|^     ' build/release-notes.md
+          } > release-body.md
+          cat release-body.md
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-          body_path: build/release-notes.md
+          body_path: release-body.md

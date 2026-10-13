@@ -2,8 +2,9 @@
 //
 // Windows downloads the update in the background and installs it on restart (electron-updater + NSIS).
 // macOS can't use electron-updater's installer, because Squirrel.Mac only accepts apps signed with an
-// Apple Developer ID and MoM is ad-hoc signed. So on a Mac, MoM downloads the new .zip itself, checks its
-// SHA-512 against the release's latest-mac.yml, swaps the app bundle in place and reopens. When it can't
+// Apple Developer ID and MoM is ad-hoc signed. So on a Mac, MoM downloads the new .dmg itself (the same
+// file students download), checks its SHA-512 against the release's latest-mac.yml, copies the app out,
+// swaps the app bundle in place and reopens. When it can't
 // (running from the DMG, or no permission to write to the Applications folder), it opens the download page.
 const { app, net, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
@@ -84,13 +85,13 @@ const run = (cmd, args) => new Promise((resolve, reject) => {
 // MARK: Mac: swap the app bundle in place
 
 /**
- * The release has one zip per chip. An Intel copy running on Apple silicon (through Rosetta) moves
+ * The release has one DMG per chip. An Intel copy running on Apple silicon (through Rosetta) moves
  * to the Apple silicon build.
  */
-function macZip(files) {
+function macDmg(files) {
   const arch = process.arch === 'arm64' || app.runningUnderARM64Translation ? 'arm64' : 'x64';
-  const zips = (files ?? []).filter((f) => f.url.endsWith('.zip'));
-  return zips.find((f) => f.url.includes(`-${arch}.`)) ?? (zips.length === 1 ? zips[0] : null);
+  const dmgs = (files ?? []).filter((f) => f.url.endsWith('.dmg'));
+  return dmgs.find((f) => f.url.includes(`-${arch}.`)) ?? (dmgs.length === 1 ? dmgs[0] : null);
 }
 
 /** The .app MoM is running from, or null when it can't replace itself there. */
@@ -142,22 +143,31 @@ async function download(url, dest, sha512, size) {
 
 async function installMac() {
   const bundle = macBundle();
-  const zip = macZip(info.files);
-  if (!bundle || !zip?.sha512) return openDownloadPage();
+  const dmg = macDmg(info.files);
+  if (!bundle || !dmg?.sha512) return openDownloadPage();
 
   set({ status: 'downloading', progress: 0, message: null });
   const work = path.join(app.getPath('temp'), 'MoM-update');
   try {
     fs.rmSync(work, { recursive: true, force: true });
     fs.mkdirSync(work, { recursive: true });
-    const file = path.join(work, 'MoM.zip');
-    await download(fileUrl(zip.url), file, zip.sha512, zip.size);
+    const file = path.join(work, 'MoM.dmg');
+    await download(fileUrl(dmg.url), file, dmg.sha512, dmg.size);
 
+    // Mount the DMG out of sight, copy the app out of it, and unmount it again.
+    const mount = path.join(work, 'mount');
     const unpacked = path.join(work, 'new');
-    await run('/usr/bin/ditto', ['-x', '-k', file, unpacked]);
-    const name = fs.readdirSync(unpacked).find((f) => f.endsWith('.app'));
-    if (!name) throw new Error('No app in the download');
-    const fresh = path.join(unpacked, name);
+    fs.mkdirSync(mount);
+    await run('/usr/bin/hdiutil', ['attach', file, '-nobrowse', '-readonly', '-noautoopen', '-mountpoint', mount]);
+    let fresh;
+    try {
+      const name = fs.readdirSync(mount).find((f) => f.endsWith('.app'));
+      if (!name) throw new Error('No app in the download');
+      fresh = path.join(unpacked, name);
+      await run('/usr/bin/ditto', [path.join(mount, name), fresh]);
+    } finally {
+      await run('/usr/bin/hdiutil', ['detach', mount, '-force']).catch((err) => log.warn('Could not unmount:', err));
+    }
     const version = await run('/usr/bin/plutil', ['-extract', 'CFBundleShortVersionString', 'raw', path.join(fresh, 'Contents', 'Info.plist')]);
     if (version !== info.version) throw new Error(`The download is version ${version}, expected ${info.version}`);
     // An app with a broken signature won't open on Apple silicon, so don't swap one in.
@@ -226,7 +236,7 @@ function found(update) {
   const notes = noteLines(update.releaseNotes);
   const base = { version: update.version, notes, progress: 0, message: null };
   if (isMac) {
-    const inPlace = !lastAttemptFailed && macBundle() && macZip(update.files);
+    const inPlace = !lastAttemptFailed && macBundle() && macDmg(update.files);
     set({
       ...base,
       status: 'available',
