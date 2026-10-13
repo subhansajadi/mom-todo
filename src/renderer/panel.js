@@ -9,6 +9,8 @@ let tasks = [];
 let editing = null;      // id of the task being renamed
 let known = null;        // ids already on screen, so new rows can slide in
 let scroll = null;
+let update = null;       // what updates.js reports: a new version, or what's new after updating
+let toastTimer = null;
 
 const CHECK = '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5.3l2 2L8.2 2.8" fill="none" stroke="#e10600" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CROSS = '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke="rgba(255,255,255,0.68)" stroke-width="1.8" stroke-linecap="round"/></svg>';
@@ -150,6 +152,95 @@ function render() {
   }
 }
 
+// MARK: Updates
+
+function notesList(notes) {
+  const ul = el('ul', 'u-notes');
+  for (const n of notes) ul.append(el('li', null, n));
+  return ul;
+}
+
+function closeButton(title, onClick) {
+  const b = el('button', 'u-close');
+  b.title = title;
+  b.innerHTML = CROSS;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/** The card above the list: a new version with what's in it, or what changed after an update. */
+function renderUpdate() {
+  const box = $('update');
+  const u = update;
+  if (u?.whatsNew) {
+    const { version, notes } = u.whatsNew;
+    const head = el('div', 'u-head');
+    const text = el('div', 'u-text');
+    text.append(el('div', 'u-title', `Updated to ${version} ✨`),
+      el('div', 'u-sub', notes.length ? "Here's what's new:" : 'Thanks for keeping MoM up to date.'));
+    head.append(text, closeButton('Close', () => send('update:seen')));
+    box.replaceChildren(head);
+    if (notes.length) box.append(notesList(notes));
+    box.hidden = false;
+    return;
+  }
+  if (!u || u.status === 'none' || u.snoozed) {
+    box.hidden = true;
+    return;
+  }
+
+  const head = el('div', 'u-head');
+  const text = el('div', 'u-text');
+  text.append(el('div', 'u-title', `🎁 MoM ${u.version} is here`),
+    el('div', 'u-sub', u.notes.length ? "What's new:" : 'A new version of MoM is ready.'));
+  head.append(text);
+  if (u.status !== 'installing') head.append(closeButton('Remind me tomorrow', () => send('update:later')));
+  box.replaceChildren(head);
+  if (u.notes.length) box.append(notesList(u.notes));
+  if (u.message) box.append(el('div', 'u-message', u.message));
+
+  const percent = `${Math.round((u.progress ?? 0) * 100)}%`;
+  const [label, enabled] =
+    u.status === 'installing' ? ['Updating…', false]
+    : u.status === 'downloading' ? [`Downloading… ${percent}`, false]
+    : u.action === 'download' ? ['Download', true]
+    : u.status === 'ready' ? ['Restart to update', true]
+    : ['Update now', true];
+  const actions = el('div', 'u-actions');
+  const go = el('button', 'u-go', label);
+  go.disabled = !enabled;
+  go.addEventListener('click', () => send('update:install'));
+  actions.append(go);
+  if (u.status !== 'installing' && u.status !== 'downloading') {
+    const later = el('button', 'u-later', 'Later');
+    later.addEventListener('click', () => send('update:later'));
+    actions.append(later);
+  }
+  box.append(actions);
+  box.hidden = false;
+}
+
+// MARK: Undo
+
+function showToast(text) {
+  $('toast-text').textContent = text;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 6000);
+}
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  $('toast').hidden = true;
+}
+
+function undo() {
+  hideToast();
+  send('task:undo');
+}
+
+$('undo').addEventListener('click', undo);
+
 // MARK: Input
 
 draft.addEventListener('keydown', (e) => {
@@ -161,11 +252,24 @@ draft.addEventListener('keydown', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') send('panel:hide');
+  // Cmd+Z / Ctrl+Z brings back a deleted task, unless it's undoing typing in a text box.
+  const typing = document.activeElement?.tagName === 'INPUT' && document.activeElement.value;
+  if (e.key.toLowerCase() === 'z' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !typing) {
+    e.preventDefault();
+    undo();
+  }
 });
 
 on('tasks', (list) => {
   tasks = list;
   render();
+});
+
+on('undoable', showToast);
+
+on('update', (u) => {
+  update = u;
+  renderUpdate();
 });
 
 on('show', () => {
@@ -175,5 +279,6 @@ on('show', () => {
   draft.focus();
 });
 
-tasks = await invoke('panel:hello');
+({ tasks, update } = await invoke('panel:hello'));
 render();
+renderUpdate();

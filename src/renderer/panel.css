@@ -214,3 +214,103 @@ input::placeholder { color: rgba(255, 255, 255, 0.5); }
 }
 .row:hover .del { display: grid; }
 .row.editing .del { display: none; }
+
+/* A new version, or what changed after updating: a white card so it stands out from the list. */
+.update {
+  flex: none;
+  padding: 11px 12px 12px;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--red-deep);
+  animation: grow 0.3s var(--spring);
+}
+.update[hidden] { display: none; }
+.u-head { display: flex; align-items: flex-start; gap: 8px; }
+.u-text { flex: 1; min-width: 0; }
+.u-title { font-size: 14px; font-weight: 800; }
+.u-sub { font-size: 11.5px; font-weight: 600; color: rgba(163, 0, 0, 0.7); margin-top: 1px; }
+.u-close {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--red);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.u-notes {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #4a0b0b;
+}
+/* Each note gets at most two lines. */
+.u-notes li {
+  position: relative;
+  padding-left: 12px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.u-notes li::before { content: "•"; position: absolute; left: 2px; color: var(--red); }
+.u-notes li + li { margin-top: 2px; }
+.u-message { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: #4a0b0b; }
+.u-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.u-go {
+  border: 0;
+  padding: 6px 13px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.u-go:disabled { opacity: 0.65; cursor: default; }
+.u-later {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--red-deep);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* "Task deleted · Undo", just above the MCU footer. */
+.toast {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(30, 0, 0, 0.88);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  font-size: 12.5px;
+  font-weight: 600;
+  animation: grow 0.25s var(--spring);
+}
+.toast[hidden] { display: none; }
+.toast button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}

@@ -23,14 +23,31 @@
     },
     "files": [
       "src/**/*",
+      "!**/.DS_Store",
       "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "subhansajadi",
+        "repo": "mom-todo",
+        "releaseType": "release"
+      }
     ],
     "mac": {
       "target": [
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
           ]
         }
       ],
@@ -39,10 +56,11 @@
       "hardenedRuntime": false,
       "extendInfo": {
         "LSUIElement": true
-      }
+      },
+      "artifactName": "MoM-${version}-mac-${arch}.${ext}"
     },
     "dmg": {
-      "artifactName": "MoM-${version}-mac.dmg",
+      "artifactName": "MoM-${version}-mac-${arch}.dmg",
       "title": "MoM",
       "background": "build/background.png",
       "window": {
@@ -84,5 +102,8 @@
   "devDependencies": {
     "electron": "^44.7.0",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

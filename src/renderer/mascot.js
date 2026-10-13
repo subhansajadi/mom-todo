@@ -24,6 +24,7 @@ const state = {
   arenaSide: -1,
   look: { x: 0, y: 0 },
   soundOn: true,
+  paused: false,           // the screen is locked or the computer is asleep
 };
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
@@ -212,6 +213,7 @@ function render() {
 }
 
 function loop(ts) {
+  if (state.paused) return;   // 'paused' starts the loop again
   requestAnimationFrame(loop);
   const m = mood();
   const lively = m === 'happy' || m === 'party' || state.hovering;
@@ -246,17 +248,52 @@ on('party', () => party());
 on('say', (text) => say(text));
 on('about', () => {
   play('happy', 1.3);
-  say("I'm MoM, MCU's robot 🤖", 2.6);
+  say("I'm MoM, MCU's mascot 🤖", 2.6);
   setTimeout(() => say('Made by MCU at TMU ❤️', 3), 2700);   // the bubble fits about 28 characters
 });
 on('sound', (onOff) => { state.soundOn = onOff; });
 on('arena-side', (side) => { state.arenaSide = side; });
+on('paused', (p) => {
+  const was = state.paused;
+  state.paused = p;
+  if (was && !p) {
+    arenaKey = null;   // bring the Rocket League car back if MoM was mid-game
+    changed();
+    requestAnimationFrame(loop);
+  }
+});
+
+on('hiding', ({ hours, shortcutTaken }) => {
+  say(hours === 1 ? 'Back in an hour 👋' : `Back in ${hours} hours 👋`, 1.7);
+  setTimeout(() => say(shortcutTaken ? 'Open MoM to bring me back' : `${shortcut} brings me back`, 1.7), 1700);
+});
+
+// Updates: MoM announces a new version once, and answers "Check for Updates…" from the menu.
+const shortcut = isMac ? '⌃⌥T' : 'Ctrl+Alt+T';
+on('update', ({ event, version }) => {
+  if (event === 'nudge') {
+    play('happy', 1.3);
+    say('New update! 🎁', 2.6);
+    setTimeout(() => say("Click me to see what's new", 3.2), 2700);
+  } else if (event === 'up-to-date') {
+    say("I'm up to date ✅", 2.6);
+  } else if (event === 'check-failed') {
+    say("Couldn't check for updates", 2.8);
+  } else if (event === 'dev-build') {
+    say('No updates in dev mode', 2.6);
+  }
+});
 
 const hello = await invoke('mascot:hello');
-Object.assign(state, { remaining: hello.remaining, total: hello.total, soundOn: hello.soundOn });
+Object.assign(state, { remaining: hello.remaining, total: hello.total, soundOn: hello.soundOn, paused: hello.paused });
 changed();
 startActivities(hello.activity);
-requestAnimationFrame(loop);
-setTimeout(() => {
-  say(state.remaining === 0 ? "Hi, I'm MoM from MCU 👋" : `Hi! ${state.remaining} to do today`, 3);
-}, 800);
+if (!state.paused) requestAnimationFrame(loop);
+const greetings = hello.update?.whatsNew
+  ? ["I just got updated! ✨", "Click me to see what's new"]
+  : [state.remaining === 0 ? "Hi, I'm MoM from MCU 👋" : `Hi! ${state.remaining} to do today`];
+if (hello.shortcutTaken) greetings.push(`${shortcut} is taken 😕`, 'Click me to open your list');
+greetings.forEach((text, i) => setTimeout(() => {
+  if (i === 0 && hello.update?.whatsNew) play('happy', 1.3);
+  say(text, 3);
+}, 800 + i * 3200));

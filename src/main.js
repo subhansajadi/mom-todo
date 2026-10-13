@@ -1,7 +1,9 @@
-const { app, BrowserWindow, screen, ipcMain, Menu, globalShortcut, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Menu, globalShortcut, Tray, nativeImage, powerMonitor, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const log = require('./log');
 const { TaskStore, Settings } = require('./store');
+const updates = require('./updates');
 
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
@@ -12,7 +14,13 @@ const SPRITE = { w: 100, h: 112 };            // MoM itself, in the window's bot
 const PANEL = { w: 320, h: 440, margin: 28 }; // the margin leaves room for the list's shadow
 const ARENA = { w: 560, h: 240 };
 
-app.setPath('userData', path.join(app.getPath('appData'), 'MoM'));
+// MOM_DATA_DIR keeps a test run away from the real task list.
+app.setPath('userData', process.env.MOM_DATA_DIR || path.join(app.getPath('appData'), 'MoM'));
+log.init(app.getPath('userData'));
+
+// A bug shouldn't greet a student with a stack trace: note it in the log and carry on.
+process.on('uncaughtException', (err) => log.error('Uncaught:', err));
+process.on('unhandledRejection', (err) => log.error('Unhandled rejection:', err));
 
 let store, settings;
 let mascot, panel, arena, overlay, tray;
@@ -21,6 +29,14 @@ let lastBlurHide = 0;
 let hovering = false;
 let drag = null;
 let lastLook = '';
+let locked = false;        // the screen is locked or the computer is asleep
+let hiddenUntil = 0;       // MoM is hidden until this time (ms since 1970), or 0 when it's out
+let hideTimer = null;
+let pollTimer = null;
+let wasPaused = false;
+let shortcutTaken = false;
+
+const isPaused = () => locked || hiddenUntil > 0;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const page = (name) => path.join(__dirname, 'renderer', name);
@@ -72,10 +88,31 @@ function windowOptions(extra) {
     ...extra,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      sandbox: true,
+      contextIsolation: true,
       backgroundThrottling: false,
       ...(extra.webPreferences ?? {}),
     },
   };
+}
+
+/**
+ * Every window only ever shows MoM's own pages. Dropping a file on the list would otherwise open that
+ * file in its place, and a crashed page would leave MoM invisible with no Dock icon to quit from.
+ */
+function guard(win, name) {
+  const crashes = [];
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('render-process-gone', (_e, details) => {
+    log.error(`The ${name} page stopped (${details.reason})`);
+    const now = Date.now();
+    crashes.push(now);
+    while (crashes.length && now - crashes[0] > 60_000) crashes.shift();
+    if (crashes.length <= 3 && !win.isDestroyed()) setTimeout(() => !win.isDestroyed() && win.reload(), 1000);
+  });
+  win.on('unresponsive', () => log.warn(`The ${name} page is not responding`));
+  return win;
 }
 
 function floatEverywhere(win, level) {
@@ -84,13 +121,13 @@ function floatEverywhere(win, level) {
 }
 
 function createWindows() {
-  mascot = new BrowserWindow(windowOptions({
+  mascot = guard(new BrowserWindow(windowOptions({
     width: MASCOT.w,
     height: MASCOT.h,
     focusable: false,
     acceptFirstMouse: true,
     webPreferences: { autoplayPolicy: 'no-user-gesture-required' },
-  }));
+  })), 'mascot');
   floatEverywhere(mascot, 3);   // speech bubbles stay above the list
   mascot.setIgnoreMouseEvents(true);
   const origin = settings.get('origin');
@@ -101,26 +138,28 @@ function createWindows() {
     resetPosition();
   }
   mascot.loadFile(page('mascot.html'));
-  mascot.once('ready-to-show', () => mascot.showInactive());
+  mascot.once('ready-to-show', () => {
+    if (!hiddenUntil) mascot.showInactive();
+  });
 
-  panel = new BrowserWindow(windowOptions({
+  panel = guard(new BrowserWindow(windowOptions({
     width: PANEL.w + PANEL.margin * 2,
     height: PANEL.h + PANEL.margin * 2,
-  }));
+  })), 'list');
   floatEverywhere(panel, 2);
   panel.loadFile(page('panel.html'));
   // Clicking anywhere else tucks the list away, like a popover.
   panel.on('blur', () => hidePanel(true));
 
   // The Rocket League car plays here, just under MoM, so MoM stands in front of the near end.
-  arena = new BrowserWindow(windowOptions({ width: ARENA.w, height: ARENA.h, focusable: false }));
+  arena = guard(new BrowserWindow(windowOptions({ width: ARENA.w, height: ARENA.h, focusable: false })), 'arena');
   floatEverywhere(arena, 1);
   arena.setIgnoreMouseEvents(true);
   arena.loadFile(page('arena.html'));
 
   // A click-through layer over the whole screen for confetti and the disco ball.
   const wa = screen.getPrimaryDisplay().workArea;
-  overlay = new BrowserWindow(windowOptions({ ...wa, focusable: false }));
+  overlay = guard(new BrowserWindow(windowOptions({ ...wa, focusable: false })), 'overlay');
   floatEverywhere(overlay, 4);
   overlay.setIgnoreMouseEvents(true);
   overlay.loadFile(page('overlay.html'));
@@ -163,9 +202,71 @@ function clampToScreens() {
 }
 
 /**
- * Reads the pointer ~60 times a second: MoM's eyes follow it, it tells us when the pointer is over MoM
- * (the rest of MoM's window lets clicks through), and it moves the window while MoM is being dragged.
+ * Reads the pointer: MoM's eyes follow it, it tells us when the pointer is over MoM (the rest of MoM's
+ * window lets clicks through), and it moves the window while MoM is being dragged. 60 times a second
+ * while dragging, 30 otherwise (MoM is drawn at 15 to 30 frames a second), and not at all while the
+ * screen is locked, the computer is asleep or MoM is hidden.
  */
+function schedulePoll() {
+  if (pollTimer || isPaused()) return;
+  pollTimer = setTimeout(() => {
+    pollTimer = null;
+    poll();
+    schedulePoll();
+  }, drag ? 16 : 33);
+}
+
+/** Stops or restarts the pointer reading and MoM's drawing. */
+function refreshPaused() {
+  const p = isPaused();
+  if (p === wasPaused) return;
+  wasPaused = p;
+  send(mascot, 'paused', p);
+  if (!p) schedulePoll();
+}
+
+function setLocked(l) {
+  locked = l;
+  refreshPaused();
+  if (!l && hiddenUntil && Date.now() >= hiddenUntil) comeBack();   // timers run late across sleep
+}
+
+// MARK: Hiding for a while
+
+const HIDE_HOURS = [1, 2, 4, 8];
+
+/** MoM says goodbye, then hides until the time is up. */
+function hideFor(hours) {
+  hidePanel();
+  send(mascot, 'hiding', { hours, shortcutTaken });
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => tuckAway(Date.now() + hours * 3600_000), 3400);
+}
+
+function tuckAway(until) {
+  hiddenUntil = until;
+  settings.set('hiddenUntil', until);
+  hidePanel();
+  hideArena();
+  mascot.hide();
+  overlay.hide();
+  refreshPaused();
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(comeBack, Math.min(until - Date.now(), 2 ** 31 - 1));
+  log.info(`Hidden until ${new Date(until).toISOString()}`);
+}
+
+/** Back early (the shortcut, the tray, or opening MoM again) or because the time is up. */
+function comeBack(greet = true) {
+  clearTimeout(hideTimer);   // also cancels a goodbye that hasn't finished
+  if (!hiddenUntil) return;
+  hiddenUntil = 0;
+  settings.set('hiddenUntil', null);
+  mascot.showInactive();
+  refreshPaused();
+  if (greet) send(mascot, 'say', "I'm back! 👋");
+}
+
 function poll() {
   if (!mascot || mascot.isDestroyed()) return;
   const m = screen.getCursorScreenPoint();
@@ -227,6 +328,10 @@ function hidePanel(fromBlur = false) {
 }
 
 function togglePanel() {
+  if (hiddenUntil) {
+    comeBack(false);
+    return showPanel();
+  }
   if (panelShown) return hidePanel();
   // A click on MoM can blur the list first; don't reopen what that click just closed.
   if (Date.now() - lastBlurHide < 350) return;
@@ -245,6 +350,7 @@ let arenaHideTimer = null;
 
 /** To MoM's left, or to its right when there's no room on the left. */
 function showArena(start) {
+  if (hiddenUntil) return;
   const s = spriteRect(), wa = workArea();
   let x = s.x - ARENA.w + 30;
   const mirrored = x < wa.x;
@@ -291,12 +397,26 @@ function keepOverlay(seconds) {
 
 // MARK: Right-click menu
 
+function updateMenuItem() {
+  const u = updates.snapshot();
+  if (u.status === 'none') return { label: 'Check for Updates…', click: () => updates.check(true) };
+  if (u.status === 'installing') return { label: 'Updating…', enabled: false };
+  return {
+    label: `🎁 Update to ${u.version}…`,
+    click: () => {
+      updates.unsnooze();
+      showPanel();
+    },
+  };
+}
+
 function menuTemplate() {
   return [
     { label: panelShown ? 'Hide List' : 'Show List', accelerator: 'Control+Alt+T', registerAccelerator: false, click: togglePanel },
     { label: 'Throw a Party 🎉', click: () => send(mascot, 'party') },
     { type: 'separator' },
-    { label: 'About MoM', click: () => send(mascot, 'about') },
+    updateMenuItem(),
+    { label: `About MoM (version ${app.getVersion()})`, click: () => send(mascot, 'about') },
     { type: 'separator' },
     {
       label: 'Sounds',
@@ -322,6 +442,12 @@ function menuTemplate() {
       },
     },
     { label: 'Move Back to Corner', click: () => { resetPosition(); if (panelShown) positionPanel(); } },
+    hiddenUntil
+      ? { label: 'Show MoM', click: () => comeBack() }
+      : {
+          label: 'Hide MoM',
+          submenu: HIDE_HOURS.map((h) => ({ label: h === 1 ? 'For 1 Hour' : `For ${h} Hours`, click: () => hideFor(h) })),
+        },
     { type: 'separator' },
     { label: 'Quit MoM', click: () => app.quit() },
   ];
@@ -330,12 +456,20 @@ function menuTemplate() {
 // MARK: Messages from the windows
 
 function listen() {
-  ipcMain.handle('mascot:hello', () => ({
-    remaining: store.open.length,
-    total: store.tasks.length,
-    soundOn: settings.get('soundOn'),
-    activity: pinnedActivity(),
-  }));
+  ipcMain.handle('mascot:hello', () => {
+    // MoM mentions a taken shortcut once, not every time it starts.
+    const warn = shortcutTaken && !settings.get('shortcutWarned');
+    if (warn) settings.set('shortcutWarned', true);
+    return {
+      remaining: store.open.length,
+      total: store.tasks.length,
+      soundOn: settings.get('soundOn'),
+      activity: pinnedActivity(),
+      shortcutTaken: warn,
+      update: updates.snapshot(),
+      paused: isPaused(),
+    };
+  });
   ipcMain.on('mascot:grab-start', () => {
     drag = { mouse: screen.getCursorScreenPoint(), origin: mascot.getPosition(), moved: false };
   });
@@ -369,12 +503,26 @@ function listen() {
     keepOverlay(seconds + 0.2);
   });
 
-  ipcMain.handle('panel:hello', () => store.tasks);
+  ipcMain.handle('panel:hello', () => ({ tasks: store.tasks, update: updates.snapshot() }));
   ipcMain.on('panel:hide', () => hidePanel());
   ipcMain.on('task:add', (_e, title) => { store.add(title); broadcastTasks(); });
   ipcMain.on('task:rename', (_e, { id, title }) => { store.rename(id, title); broadcastTasks(); });
-  ipcMain.on('task:delete', (_e, id) => { store.delete(id); broadcastTasks(); });
-  ipcMain.on('task:clear', () => { store.clearDone(); broadcastTasks(); });
+  ipcMain.on('task:delete', (_e, id) => {
+    if (store.delete(id)) send(panel, 'undoable', 'Task deleted');
+    broadcastTasks();
+  });
+  ipcMain.on('task:clear', () => {
+    const n = store.clearDone();
+    if (n) send(panel, 'undoable', n === 1 ? 'Cleared 1 task' : `Cleared ${n} tasks`);
+    broadcastTasks();
+  });
+  ipcMain.on('task:undo', () => {
+    if (store.undo()) broadcastTasks();
+  });
+
+  ipcMain.on('update:install', () => updates.install());
+  ipcMain.on('update:later', () => updates.later());
+  ipcMain.on('update:seen', () => updates.dismissWhatsNew());
   ipcMain.on('task:toggle', (_e, id) => {
     const completed = store.toggle(id);
     broadcastTasks();
@@ -401,15 +549,38 @@ function start() {
 
   const dir = app.getPath('userData');
   migrateOldTasks(dir);
-  store = new TaskStore(dir);
-  settings = new Settings(dir);
+  store = new TaskStore(dir);   // settings were loaded before the Applications check
 
   listen();
+  // Still inside a "Hide MoM for…" from before a restart: stay hidden until it's over.
+  const hidden = settings.get('hiddenUntil');
+  if (hidden > Date.now()) hiddenUntil = hidden;
   createWindows();
-  setInterval(poll, 16);
+  if (hiddenUntil) tuckAway(hiddenUntil);
+  wasPaused = isPaused();
+  schedulePoll();
 
-  // Ctrl+Alt+T (Control-Option-T on a Mac) opens the list from anywhere.
-  globalShortcut.register('Control+Alt+T', togglePanel);
+  // Ctrl+Alt+T (Control-Option-T on a Mac) opens the list from anywhere, unless another app already has it.
+  try {
+    shortcutTaken = !globalShortcut.register('Control+Alt+T', togglePanel);
+  } catch {
+    shortcutTaken = true;
+  }
+  if (shortcutTaken) log.warn('Control+Alt+T is taken by another app');
+
+  // Nothing to animate while the screen is locked or the computer sleeps.
+  powerMonitor.on('lock-screen', () => setLocked(true));
+  powerMonitor.on('suspend', () => setLocked(true));
+  powerMonitor.on('unlock-screen', () => setLocked(false));
+  powerMonitor.on('resume', () => setLocked(false));
+
+  updates.init({
+    settings,
+    onChange: (u, event) => {
+      send(panel, 'update', u);
+      send(mascot, 'update', { ...u, event });
+    },
+  });
 
   for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
     screen.on(event, () => clampToScreens());
@@ -425,11 +596,43 @@ function start() {
   }
 }
 
+/**
+ * Run from the DMG or the Downloads folder, MoM vanishes when the DMG is ejected and can't update
+ * itself, so offer to move it into Applications the first time.
+ */
+async function offerMoveToApplications() {
+  if (!isMac || !app.isPackaged || app.isInApplicationsFolder() || settings.get('skipMove')) return true;
+  app.focus({ steal: true });
+  const { response, checkboxChecked } = await dialog.showMessageBox({
+    type: 'question',
+    message: 'Move MoM to your Applications folder?',
+    detail: "MoM works best from Applications: it stays put when you eject the download, and it can update itself.",
+    buttons: ['Move to Applications', 'Not Now'],
+    defaultId: 0,
+    cancelId: 1,
+    checkboxLabel: "Don't ask again",
+  });
+  if (checkboxChecked) settings.set('skipMove', true);
+  if (response !== 0) return true;
+  try {
+    return !app.moveToApplicationsFolder();   // relaunches from Applications when it works
+  } catch (err) {
+    log.error('Could not move to Applications:', err);
+    return true;
+  }
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => showPanel());
-  app.whenReady().then(start);
+  app.on('second-instance', () => {
+    comeBack(false);
+    showPanel();
+  });
+  app.whenReady().then(async () => {
+    settings = new Settings(app.getPath('userData'));
+    if (await offerMoveToApplications()) start();
+  });
   app.on('window-all-closed', () => {});   // keep running; MoM has no main window
   app.on('will-quit', () => globalShortcut.unregisterAll());
 }
