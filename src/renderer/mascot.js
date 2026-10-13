@@ -244,6 +244,11 @@ on('counts', ({ remaining, total }) => { state.remaining = remaining; state.tota
 on('completed', (remaining) => celebrate(remaining));
 on('party', () => party());
 on('say', (text) => say(text));
+on('about', () => {
+  play('happy', 1.3);
+  say("I'm MoM, MCU's robot 🤖", 2.6);
+  setTimeout(() => say('Made by MCU at TMU ❤️', 3), 2700);   // the bubble fits about 28 characters
+});
 on('sound', (onOff) => { state.soundOn = onOff; });
 on('arena-side', (side) => { state.arenaSide = side; });
 
@@ -253,5 +258,5 @@ changed();
 startActivities(hello.activity);
 requestAnimationFrame(loop);
 setTimeout(() => {
-  say(state.remaining === 0 ? "Hi, I'm MoM 👋" : `Hi! ${state.remaining} to do today`, 3);
+  say(state.remaining === 0 ? "Hi, I'm MoM from MCU 👋" : `Hi! ${state.remaining} to do today`, 3);
 }, 800);

@@ -1,8 +1,8 @@
-<p align="center"><img src="build/icon.png" width="160" alt="MoM"></p>
+<p align="center"><img src="docs/banner.png" alt="MoM, the Mechatronics Course Union's desk robot"></p>
 
 # MoM
 
-A little robot that lives in the corner of your screen and holds your to-do list. Free, for macOS and Windows.
+**MoM is the robot of the [Mechatronics Course Union](#about-mcu) (MCU) at Toronto Metropolitan University.** It lives in the corner of your screen and holds your to-do list. It's free, for macOS and Windows, and made by MCU for MTE students (and anyone else who wants a robot keeping them on track).
 
 MoM floats in the corner, its eyes follow your mouse, and while you work it gets up to its own thing: soldering a PCB, fixing itself with a wrench, reading an MTE textbook, doing chemistry, or watching a Rocket League car freestyle across your screen. Check off a task and it cheers. Finish everything and a disco ball drops from the top of the screen while MoM does a robot dance.
 
@@ -59,7 +59,7 @@ npm install
 npm start            # run it
 npm run dist:mac     # build the .dmg (on a Mac)
 npm run dist:win     # build the installer (on Windows)
-npm run icon         # redraw the app icon from MoM's drawing code
+npm run art          # redraw the icon, README banner and installer background
 ```
 
 Launch with `npm start -- --activity rocketLeague` to pin one activity (`soldering`, `fixing`, `rocketLeague`, `reading`, `chemistry`) while you work on it.
@@ -75,7 +75,7 @@ git push --follow-tags
 
 ## How it's built
 
-Electron, with everything drawn on canvas in code (no image assets except the icon, which is also generated from the drawing code).
+Electron, with MoM and everything around it drawn on canvas in code. The icon, README banner and macOS installer background are generated from the same drawing code plus the MCU logo (`scripts/make-art.js`).
 
 | File | What it does |
 |---|---|
@@ -89,6 +89,14 @@ Electron, with everything drawn on canvas in code (no image assets except the ic
 | `src/renderer/lib/arena-art.js` | The car and ball |
 | `src/renderer/overlay.js` | Confetti and the disco ball |
 
+## About MCU
+
+<img src="src/assets/mcu-logo.svg" width="120" align="right" alt="MCU logo">
+
+The **Mechatronics Course Union** is the student course union for Mechatronics Engineering at Toronto Metropolitan University (TMU). MCU runs events and supports MTE students through the program, and MoM is its mascot. MoM the app is one of the ways MCU tries to make the grind a bit more fun.
+
+MTE student with an idea for MoM (a new activity, a new party, a bug)? Open an issue or a pull request.
+
 ## License
 
-MIT
+MIT. The MCU name and logo belong to the Mechatronics Course Union. Please don't reuse them outside of MoM without asking MCU.

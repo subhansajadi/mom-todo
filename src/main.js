@@ -296,6 +296,8 @@ function menuTemplate() {
     { label: panelShown ? 'Hide List' : 'Show List', accelerator: 'Control+Alt+T', registerAccelerator: false, click: togglePanel },
     { label: 'Throw a Party 🎉', click: () => send(mascot, 'party') },
     { type: 'separator' },
+    { label: 'About MoM', click: () => send(mascot, 'about') },
+    { type: 'separator' },
     {
       label: 'Sounds',
       type: 'checkbox',
@@ -417,7 +419,7 @@ function start() {
   if (isWin) {
     const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png')).resize({ width: 16, height: 16 });
     tray = new Tray(icon);
-    tray.setToolTip('MoM');
+    tray.setToolTip("MoM · MCU's desk robot");
     tray.on('click', togglePanel);
     tray.on('right-click', () => tray.popUpContextMenu(Menu.buildFromTemplate(menuTemplate())));
   }

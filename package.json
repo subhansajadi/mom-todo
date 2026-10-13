@@ -2,21 +2,21 @@
   "name": "mom-todo",
   "productName": "MoM",
   "version": "1.0.0",
-  "description": "A little robot that lives in the corner of your screen and holds your to-do list.",
+  "description": "MoM, the Mechatronics Course Union's desk robot: a to-do list that lives in the corner of your screen.",
   "main": "src/main.js",
   "author": "Subhan Sajadi",
   "license": "MIT",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "icon": "electron scripts/make-icon.js",
+    "art": "electron scripts/make-art.js",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never"
   },
   "build": {
     "appId": "com.subhansajadi.mom",
     "productName": "MoM",
-    "copyright": "Copyright \u00a9 2026 Subhan Sajadi",
+    "copyright": "Copyright © 2026 Subhan Sajadi · Mechatronics Course Union, Toronto Metropolitan University",
     "directories": {
       "output": "dist.nosync",
       "buildResources": "build"
@@ -42,7 +42,27 @@
       }
     },
     "dmg": {
-      "artifactName": "MoM-${version}-mac.dmg"
+      "artifactName": "MoM-${version}-mac.dmg",
+      "title": "MoM",
+      "background": "build/background.png",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "iconSize": 96,
+      "contents": [
+        {
+          "x": 150,
+          "y": 230,
+          "type": "file"
+        },
+        {
+          "x": 390,
+          "y": 230,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "win": {
       "target": [
