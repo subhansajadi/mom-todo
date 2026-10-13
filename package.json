@@ -1,7 +1,7 @@
 {
   "name": "mom-todo",
   "productName": "MoM",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MoM, the Mechatronics Course Union's desk robot: a to-do list that lives in the corner of your screen.",
   "main": "src/main.js",
   "author": "Subhan Sajadi",
